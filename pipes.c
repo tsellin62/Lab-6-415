@@ -44,7 +44,11 @@ int main(int argc, char* argv[]) {
      *   - Store the returned pointer in thread_ids.
      *   - Check if malloc() failed. If it failed, print an error and exit.
      */
-
+	thread_ids = (pthread_t*)malloc(NUM_WORKERS * sizeof(pthread_t));
+	if (thread_ids == NULL) {
+		printf("Malloc failed\n");
+		exit(1);
+	}
 
     /*
      * STEP 2: Initialize the mutexes.
@@ -57,7 +61,12 @@ int main(int argc, char* argv[]) {
      *   - counter_lock protects the shared counter.
      *   - pipe_lock prevents multiple threads from writing mixed messages at the same time.
      */
-
+	if (pthread_mutex_init(&counter_lock, NULL) != 0) {
+		printf("Mutex init failed\n");
+	}
+	if (pthread_mutex_init(&pipe_lock, NULL) != 0) {
+		printf("Mutex init failed\n");
+	}
 
     /*
      * STEP 3: Create the pipe.
@@ -70,6 +79,10 @@ int main(int argc, char* argv[]) {
      *   - pipe_fd[0] is used for reading.
      *   - pipe_fd[1] is used for writing.
      */
+	if (pipe(pipe_fd) == -1) {
+		perror("Error creating pipe");
+		exit(1);
+	}
 
 
     /*
@@ -79,6 +92,10 @@ int main(int argc, char* argv[]) {
      *   - Create an array of NUM_WORKERS integers.
      *   - Fill the array with values 0 through NUM_WORKERS - 1.
      */
+	int numbers[NUM_WORKERS];
+	for (int i = 0; i < NUM_WORKERS; i++) {
+		numbers[i] = i;
+	}
 
 
     /*
@@ -89,7 +106,9 @@ int main(int argc, char* argv[]) {
      *   - Each thread should run simulate_work().
      *   - Pass the address of the matching thread ID to each thread.
      */
-
+	for (int i = 0; i < NUM_WORKERS; i++) {
+		pthread_create(&thread_ids[i], NULL, simulate_work, (void*)&numbers[i]);
+	}
 
     /*
      * STEP 6: Wait for all worker threads to finish.
@@ -100,7 +119,9 @@ int main(int argc, char* argv[]) {
      * Why wait before reading?
      *   - In this starter design, the main thread reads all messages after workers finish.
      */
-
+	for (int i = 0; i < NUM_WORKERS; i++) {
+		pthread_join(thread_ids[i], NULL);
+	}
 
     /*
      * STEP 7: Close the write end of the pipe in main.
@@ -111,7 +132,7 @@ int main(int argc, char* argv[]) {
      * Why:
      *   - read() needs the write end closed so it can eventually return 0, meaning EOF.
      */
-
+	close(pipe_fd[1]);
 
     /*
      * STEP 8: Read messages from the pipe.
@@ -125,7 +146,11 @@ int main(int argc, char* argv[]) {
      *   - read() does not automatically add '\0' to make a C string.
      *   - You may use fwrite(buffer, 1, bytes_read, stdout) to print safely.
      */
-
+	char buf[512];
+	for (int i = 0; i < NUM_WORKERS; i++) {
+		ssize_t bytes_read = read(pipe_fd[0], buf, sizeof(buf));
+		fwrite(buf, 1, bytes_read, stdout);
+	}
 
     /*
      * STEP 9: Print the final counter value.
@@ -135,6 +160,7 @@ int main(int argc, char* argv[]) {
      *   - If synchronization is correct, the expected value is:
      *       NUM_WORKERS * INCREMENTS_PER_THREAD
      */
+	printf("Final counter value: %d\n", counter);
 
 
     /*
@@ -145,7 +171,11 @@ int main(int argc, char* argv[]) {
      *   - Close the read end of the pipe.
      *   - Free the thread_ids array.
      */
-
+	free(thread_ids);
+	thread_ids = NULL;
+	pthread_mutex_destroy(&counter_lock);
+	pthread_mutex_destroy(&pipe_lock);
+	close(pipe_fd[0]);
 
     return 0;
 }
@@ -159,6 +189,7 @@ void* simulate_work(void* arg) {
      *   - Cast arg to int*.
      *   - Use this value as the thread's ID.
      */
+	int* id = (int*)arg;
 
 
     /*
@@ -171,7 +202,15 @@ void* simulate_work(void* arg) {
      *   - Increment counter.
      *   - Unlock counter_lock.
      */
+	printf("Thread %d has started.\n", *id);
 
+	for (int i = 0; i < INCREMENTS_PER_THREAD; i++) {
+		usleep(5000);
+		pthread_mutex_lock(&counter_lock);
+		counter++;
+		pthread_mutex_unlock(&counter_lock);
+	}
+	printf("Thread %d updated the shared counter.\n", *id);
 
     /*
      * STEP 13: Prepare a completion message.
@@ -181,7 +220,8 @@ void* simulate_work(void* arg) {
      *   - Use snprintf() to create a message like:
      *       Thread <id> finished work. Counter is now <counter>.
      */
-
+	char message[75];
+	snprintf(message, sizeof(message), "Message from pipe: Thread %d finished work.\n", *id);
 
     /*
      * STEP 14: Write the completion message to the pipe.
@@ -194,7 +234,10 @@ void* simulate_work(void* arg) {
      * Why:
      *   If multiple threads write at the same time, their messages may become mixed.
      */
-
+	pthread_mutex_lock(&pipe_lock);
+	write(pipe_fd[1], message, strlen(message));
+	printf("Thread %d wrote a message to the pipe.\n", *id);
+	pthread_mutex_unlock(&pipe_lock);
 
     /*
      * STEP 15: Exit the thread.
@@ -202,6 +245,8 @@ void* simulate_work(void* arg) {
      * TODO:
      *   - Use pthread_exit(NULL), or simply return NULL.
      */
+	printf("Thread %d finished.\n", *id);
+	pthread_exit(NULL);
 
     return NULL;
 }
