@@ -38,7 +38,11 @@ int main(int argc, char* argv[]) {
      *   - Store the returned pointer in thread_ids.
      *   - Check if malloc() failed. If it failed, print an error and exit.
      */
-
+	thread_ids = (pthread_t*)malloc(NUM_WORKERS * sizeof(pthread_t));
+	if (thread_ids == NULL) {
+		printf("Error with malloc\n");
+		exit(1);
+	}
 
     /*
      * STEP 2: Initialize the mutex.
@@ -47,7 +51,9 @@ int main(int argc, char* argv[]) {
      *   - Use pthread_mutex_init() to initialize counter_lock.
      *   - The second argument can be NULL for default mutex attributes.
      */
-
+	if (pthread_mutex_init(&counter_lock, NULL) != 0) {
+		printf("Mutex init failed\n");
+	}
 
     /*
      * STEP 3: Create an integer ID for each thread.
@@ -57,21 +63,26 @@ int main(int argc, char* argv[]) {
      *   - Fill the array with values 0 through NUM_WORKERS - 1.
      *   - These IDs will be passed to the worker threads.
      */
+	int numbers[NUM_WORKERS];
+	for (int i = 0; i < NUM_WORKERS; i++) {
+		numbers[i] = i;
+	}
 
-
-    /*
-     * STEP 4: Create the worker threads.
-     *
-     * TODO:
-     *   - Use a for loop from 0 to NUM_WORKERS - 1.
-     *   - Inside the loop, call pthread_create().
-     *   - Pass simulate_work as the function each thread should run.
-     *   - Pass the address of the matching thread ID as the argument.
-     *
-     * Hint:
-     *   pthread_create(&thread_ids[i], NULL, simulate_work, (void*)&numbers[i]);
-     */
-
+	/*
+	 * STEP 4: Create the worker threads.
+	 *
+	 * TODO:
+	 *   - Use a for loop from 0 to NUM_WORKERS - 1.
+	 *   - Inside the loop, call pthread_create().
+	 *   - Pass simulate_work as the function each thread should run.
+	 *   - Pass the address of the matching thread ID as the argument.
+	 *
+	 * Hint:
+	 *   pthread_create(&thread_ids[i], NULL, simulate_work, (void*)&numbers[i]);
+	 */
+	for (int i = 0; i < NUM_WORKERS; i++) {
+		pthread_create(&thread_ids[i], NULL, simulate_work, (void*)&numbers[i]);
+	}
 
     /*
      * STEP 5: Wait for all worker threads to finish.
@@ -80,7 +91,9 @@ int main(int argc, char* argv[]) {
      *   - Use a for loop from 0 to NUM_WORKERS - 1.
      *   - Inside the loop, call pthread_join() on each thread.
      */
-
+	for (int i = 0; i < NUM_WORKERS; i++) {
+		pthread_join(thread_ids[i], NULL);
+	}
 
     /*
      * STEP 6: Print the final counter value.
@@ -90,7 +103,8 @@ int main(int argc, char* argv[]) {
      *   - If everything is correct, the expected value is:
      *       NUM_WORKERS * INCREMENTS_PER_THREAD
      */
-
+	printf("Counter: %d\n", counter);
+	printf("Expected: %d\n", NUM_WORKERS * INCREMENTS_PER_THREAD);
 
     /*
      * STEP 7: Clean up resources.
@@ -99,7 +113,9 @@ int main(int argc, char* argv[]) {
      *   - Destroy the mutex using pthread_mutex_destroy().
      *   - Free the thread_ids array.
      */
-
+	free(thread_ids);
+	thread_ids = NULL;
+	pthread_mutex_destroy(&counter_lock);
 
     return 0;
 }
@@ -113,7 +129,7 @@ void* simulate_work(void* arg) {
      *   - Cast arg to int*.
      *   - Use this value as the thread's ID for printing messages.
      */
-
+	int* id = (int*)arg;
 
     /*
      * STEP 9: Print that this thread has started.
@@ -122,7 +138,7 @@ void* simulate_work(void* arg) {
      *   - Print a message like:
      *       Thread <id> started.
      */
-
+	printf("Thread %d started.\n", *id);
 
     /*
      * STEP 10: Simulate some work.
@@ -130,7 +146,7 @@ void* simulate_work(void* arg) {
      * TODO:
      *   - Call sleep(1) or usleep() to make thread scheduling easier to observe.
      */
-
+	sleep(1);
 
     /*
      * STEP 11: Safely update the shared counter.
@@ -143,7 +159,10 @@ void* simulate_work(void* arg) {
      * Why:
      *   counter is shared by all threads. Without a mutex, a race condition can occur.
      */
-
+	pthread_mutex_lock(&counter_lock);
+	counter += INCREMENTS_PER_THREAD;
+	printf("Thread %d is updating the shared counter.\n", *id);
+	pthread_mutex_unlock(&counter_lock);
 
     /*
      * STEP 12: Print that this thread has finished.
@@ -152,6 +171,7 @@ void* simulate_work(void* arg) {
      *   - Print a message like:
      *       Thread <id> finished.
      */
+	printf("Thread %d finished.\n", *id);
 
 
     /*
@@ -160,6 +180,7 @@ void* simulate_work(void* arg) {
      * TODO:
      *   - Use pthread_exit(NULL), or simply return NULL.
      */
+	pthread_exit(NULL);
 
     return NULL;
 }
