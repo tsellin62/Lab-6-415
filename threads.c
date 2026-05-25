@@ -103,8 +103,7 @@ int main(int argc, char* argv[]) {
      *   - If everything is correct, the expected value is:
      *       NUM_WORKERS * INCREMENTS_PER_THREAD
      */
-	printf("Counter: %d\n", counter);
-	printf("Expected: %d\n", NUM_WORKERS * INCREMENTS_PER_THREAD);
+	printf("Final counter value: %d\n", counter);
 
     /*
      * STEP 7: Clean up resources.
